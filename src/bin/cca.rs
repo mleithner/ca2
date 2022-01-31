@@ -82,7 +82,7 @@ pub fn main() -> std::io::Result<()> {
         value_maps.push(HashMap::new());
     }
 
-    let mut out : u64 = 0; // Output byte
+    let mut out : CompressionChunk = 0; // Output byte
     let mut outpos : u8 = 0; // Position (from the right) of the most significant filled bit in `out`
     for result in reader.records() {
         //println!("row {}", ca_spec.n);
@@ -151,7 +151,7 @@ pub fn main() -> std::io::Result<()> {
 
     println!("Successfully compressed {} rows, writing metadata...", ca_spec.n);
     writer_meta.write_all(MAGIC_BYTES_CCA.as_bytes())?;
-    writer_meta.write_all(&serialize_caspec(&ca_spec))?;
+    writer_meta.write_all(&ca_spec.serialize())?;
 
     Ok(())
 }
@@ -173,12 +173,4 @@ fn generate_column_map(vs_in: &Vec<u16>, vs_out: &Vec<u16>) -> Option<Vec<usize>
         }
     }
     Some(column_map)
-}
-
-fn generate_bit_sizes(vs_out: &Vec<u16>) -> Vec<u8> {
-    let mut bit_sizes = Vec::with_capacity(vs_out.len());
-    for v in vs_out {
-        bit_sizes.push(std::cmp::max(1, (*v as f64).log2().ceil() as u8));
-    }
-    bit_sizes
 }

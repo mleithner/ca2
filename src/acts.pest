@@ -1,0 +1,56 @@
+file = { SOI ~ (section+) ~ EOI }
+
+section = { system_section | parameter_section | relation_section | constraint_section | test_set_section }
+
+system_section = { "[System]" ~ system_properties}
+parameter_section = { "[Parameter]" ~ parameters}
+relation_section = { "[Relation]" ~ relations}
+constraint_section = { "[Constraint]" ~ constraints}
+test_set_section = { "[Test Set]" ~ test_set}
+
+// [System]
+system_properties = { system_name_property }
+system_name_property = { "Name:" ~ system_name }
+system_name = { name }
+
+// [Parameter]
+parameters = { parameter+ }
+parameter = { parameter_name ~ "(" ~ parameter_type ~ ")" ~ ":" ~ parameter_values}
+parameter_name = { name }
+parameter_type = { ^"int" | ^"enum" | ^"boolean" }
+parameter_values = { value ~ ("," ~ value)* }
+
+// [Relation]
+relations = { relation* }
+relation = { relation_name ~ ":" ~ "(" ~ relation_params ~ "," ~ ASCII_NONZERO_DIGIT ~ ")" }
+relation_name = @{ "R" ~ name }
+relation_params = { parameter_name ~ ("," ~ parameter_name)* }
+
+// [Constraint]
+// Directly adopted from the ACTS user manual
+// XXX currently commented out to prevent parsing errors, constraints are not implemented at the moment
+// XXX parentheses support missing
+constraints = { constraint* }
+constraint = { not_newline+ }
+//constraint = { simple_constraint ~ ( boolean_op ~ simple_constraint )* }
+//simple_constraint = { term ~ relational_op ~ term }
+//term = { parameter_name | ( parameter_name ~ arithmetic_op ~ parameter ) | (parameter_name ~ arithmetic_op ~ value) }
+//boolean_op = { "&&" | "||" | "=>" }
+//relational_op = { ">" | "<" | "=" | "!=" | ">=" | "<=" }
+//arithmetic_op = { "+" | "-" | "*" | "/" | "%" }
+
+// [Test Set]
+test_set = { test_set_content? }
+test_set_content = { test_set_header ~ (test_set_row)+ }
+test_set_header = { parameter_name ~ ("," ~ parameter_name)* }
+test_set_row = { value ~ ("," ~ value)* }
+
+// "Any value"
+value = @{ ( "_" | "-" | ASCII_ALPHANUMERIC )+ }
+// Same as value, but must not start with a digit or dash
+name = @{ ( "_" | ASCII_ALPHA ) ~ ( "_" | "-" | ASCII_ALPHANUMERIC )* }
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = _{ "--" ~ not_newline* }
+not_newline = {
+    !( "\r" | "\n") ~ ANY
+}

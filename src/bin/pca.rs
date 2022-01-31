@@ -72,7 +72,7 @@ pub fn main() -> std::io::Result<()> {
         // First the offset...
         writer.write_all(&cca_offsets[i].to_be_bytes())?;
         // Then the CA specification
-        writer.write_all(&serialize_caspec(ca_spec))?;
+        writer.write_all(&ca_spec.serialize())?;
     }
 
     println!("Finished writing archive {}", args.output_file.display());
@@ -95,7 +95,7 @@ fn parse_ccmeta(input_file : &PathBuf) -> std::io::Result<CASpec> {
         ));
     }
 
-    let ca_spec = unserialize_caspec(buf_noprefix.unwrap());
+    let ca_spec = CASpec::unserialize(buf_noprefix.unwrap());
 
     if ca_spec.is_none() {
         return Err(Error::new(

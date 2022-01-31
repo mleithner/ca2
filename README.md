@@ -8,6 +8,6 @@ It provides three executables:
 * `pca` packages one or more pairs of `.caa` and `.ccmeta` files and optionally an unpacker executable (like `dca`) into a single `.ca2` archive.
 * `dca` takes one or more `.ca2` archives and a CA specification in ACTS or CTWedge format and returns a compatible CA in CSV form, if available.
 
-*Please note that `dca` is not yet contained in this repository; we are currently preparing it for its public release on 2022-02-01.*
+*Please note that the CTWedge parser of `dca` is not yet contained in this repository; we are currently preparing it for its public release on 2022-02-01.*
 
 For further information, feature requests and bug reports, please contact `mleithner@sba-research.org`.
