@@ -1,5 +1,13 @@
 use std::io::Read;
 
+// Parsers
+extern crate pest;
+extern crate pest_derive;
+pub mod parsers;
+pub use self::parsers::acts::try_parse_acts;
+pub use self::parsers::ctwedge::try_parse_ctwedge;
+
+
 // Magic bytes for a CA2 archive
 pub const MAGIC_BYTES_CA2_PRE : u8 = b'_';
 pub const MAGIC_BYTES_CA2 : &[u8; 16] = b"CCAA_INDEX_FILE\n";

@@ -1,0 +1,88 @@
+cit_model = _{SOI ~ model_spec ~ parameter_spec ~ constraint_spec? ~ EOI }
+model_spec = { "Model" ~ id }
+parameter_spec = { "Parameters" ~ ":" ~ parameters }
+parameters = { parameter+ }
+constraint_spec = { "Constraints" ~ ":" ~ constraints }
+constraints = { constraint+ }
+
+parameter = { ( bool | enumerative | range) ~ ";"? }
+
+// Bool
+// XXX We deviate from the handling of CTwedge here.
+// CTWedge exhaustively lists all possible ways of writing any combination of "true" and "false".
+// For us, this is simple an enumerative (see below). Only the bareword "Boolean" has special meaning.
+bool = { id ~ ":" ~ boolean_bareword }
+boolean_bareword = { ^"Boolean" }
+
+// Enumerated elements
+enumerative = { id ~ ":" ~ "{" ~ elements ~ "}" }
+elements = { element ~ (","? ~ element)* }
+element = { element_id }
+
+// Range of values
+range = { id ~ ":" ~ "[" ~ range_begin ~ ".." ~ range_end ~ "]" ~ (^"step" ~ step)? }
+range_begin = { possibly_signed_number }
+range_end = { possibly_signed_number }
+step = { ASCII_DIGIT+ }
+
+// CONSTRAINTS
+constraint = { "#" ~ implies_expression ~ "#" }
+
+// Precedence:
+// not, and, or, implies
+
+implies_expression = { or_expression ~ (implies_operator ~ or_expression)*  }
+or_expression = { and_expression ~ (or_operator ~ and_expression)* }
+and_expression = { equal_expression ~ (and_operator ~ equal_expression)* }
+equal_expression = { relational_expression ~ (equality_operator ~ relational_expression)* }
+relational_expression = { plus_minus ~ (relational_operator ~ plus_minus)* }
+
+// Numerical expressions
+plus_minus = { mod_mult_div ~ (plus_minus_operator ~ mod_mult_div)* }
+mod_mult_div = { primary ~ (mod_mult_div_operator ~ primary)* }
+primary = { not_expression | ("(" ~ implies_expression ~ ")") | atomic_predicate }
+not_expression = { not_operator ~ primary }
+atomic_predicate = { bool_const | element_id }
+
+
+// All of these terminals and "low-level nonterminals" are atomic,
+// i.e. they do not tolerate whitespace. Not that there's much chance
+// to insert whitespace in most of them, anyway.
+
+relational_operator = { greater_than_operator | less_than_operator | greater_or_equal_operator | less_or_equal_operator }
+greater_than_operator = @{ ">" }
+less_than_operator = @{ "<" }
+greater_or_equal_operator = @{ ">=" }
+less_or_equal_operator = @{ "<=" }
+equality_operator = @{ equal_operator | not_equal_operator }
+equal_operator = @{ "==" | "=" }
+not_equal_operator = @{ "!=" }
+or_operator = @{ "||" | ^"or" | "|"}
+and_operator = @{ "&&" | ^"and" | "&" }
+not_operator = @{ "!" | ^"not" }
+
+plus_minus_operator = @{ plus | minus }
+plus = @{ "+" }
+minus = @{ "_" }
+
+mod_mult_div_operator = @{ modulo | mult | div }
+modulo = @{ "%" }
+mult = @{ "*" }
+div = @{ "" }
+
+implies_operator = @{ implies | iff }
+implies = @{ "=>" | "->" }
+iff = @{ "<=>" | "<->" }
+
+bool_const = @{^"false" | ^"true"}
+
+element_id = @{ id | numid | (ASCII_ALPHANUMERIC+) | possibly_signed_number }
+numid = @{ ASCII_DIGIT+ ~ id }
+id = @{ (ASCII_ALPHA | ASCII_DIGIT | "$") ~ ( ASCII_ALPHANUMERIC | "$")* }
+possibly_signed_number = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = _{ "//" ~ not_newline* }
+not_newline = {
+    !( "\r" | "\n") ~ ANY
+}

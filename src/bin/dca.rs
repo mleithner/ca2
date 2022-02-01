@@ -3,15 +3,6 @@ use std::fs::File;
 use std::io::{Write, Read, BufReader, BufRead, BufWriter, Error, ErrorKind, Seek, SeekFrom};
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
-
-use pest::Parser;
-
-#[derive(Parser)]
-#[grammar = "acts.pest"]
-struct ActsParser;
 
 // Compressed CA unpacker
 //
@@ -135,87 +126,15 @@ fn parse_request(path: &PathBuf, strength: u8) -> RequestedCA {
     file.read_to_string(&mut contents).expect("Unable to read the ACTS file");
 
     // Try to parse as ACTS file
-    let pairs = ActsParser::parse(Rule::file, &contents).unwrap_or_else(|e| panic!("Unable to parse the ACTS file: {}", e));
-
-    // Data for RequestedCA
-    let mut first_parameter = true;
-    let mut current_parameter_values = Vec::new();
-    let mut parameter_names = Vec::new();
-    let mut parameter_values = Vec::new();
-    let mut parameter_sizes = Vec::new();
-
-    // Traverse parse result to extract data for RequestedCA
-    for pair in pairs {
-        for inner_pair in pair.into_inner() {
-            match inner_pair.as_rule() {
-                Rule::section => {
-                    for section in inner_pair.into_inner() {
-                        match section.as_rule() {
-                            Rule::system_section => {},
-                            Rule::parameter_section => {
-                                for parameter_section in section.into_inner() {
-                                    if parameter_section.as_rule() == Rule::parameters {
-                                        for parameter in parameter_section.into_inner() {
-                                            for parameter_token in parameter.into_inner() {
-                                                match parameter_token.as_rule() {
-                                                    Rule::parameter_name => {
-                                                        if first_parameter {
-                                                            first_parameter = false;
-                                                        } else {
-                                                            parameter_sizes.push(current_parameter_values.len() as u16);
-                                                            parameter_values.push(current_parameter_values.clone());
-                                                            current_parameter_values = Vec::new();
-                                                        }
-                                                        parameter_names.push(parameter_token.as_str().to_string());
-                                                    },
-                                                    Rule::parameter_type => { /* ignored */ },
-                                                    Rule::parameter_values => {
-                                                        for parameter_value in parameter_token.into_inner() {
-                                                            if parameter_value.as_rule() == Rule::value {
-                                                                current_parameter_values.push(parameter_value.as_str().to_string());
-                                                            }
-                                                        }
-                                                    },
-                                                    _ => unreachable!()
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Last parameter
-                                    if current_parameter_values.len() > 0 {
-                                        parameter_sizes.push(current_parameter_values.len() as u16);
-                                        parameter_values.push(current_parameter_values.clone());
-                                    }
-                                }
-                            }
-                            Rule::constraint_section => eprintln!("ACTS Parser Warning: Constraints are unsupported."),
-                            Rule::test_set_section => eprintln!("ACTS Parser Warning: Predefined test sets are unsupported."),
-                            Rule::relation_section => eprintln!("ACTS Parser Warning: Relations/VCAs are unsupported."),
-                            _ => unreachable!("ACTS Parser Warning: Unknown section {:?}", section.as_rule())
-                        }
-                    }
-                },
-                Rule::EOI => {}
-                _ => unreachable!("{:?}", inner_pair.as_rule())
-            };
-        }
+    let acts_result = try_parse_acts(&contents, strength);
+    if acts_result.is_some() {
+        return acts_result.unwrap();
     }
-
-    // Derive the sorted (descending) parameter sizes
-    let mut vs = parameter_sizes.clone();
-    vs.sort_by(|a, b| b.cmp(a));
-
-    RequestedCA {
-        parameter_names,
-        parameter_values,
-        parameter_sizes,
-        ca_spec: CASpec {
-            n: 0,
-            t: strength,
-            vs
-        }
+    let ctwedge_result = try_parse_ctwedge(&contents, strength);
+    if ctwedge_result.is_some() {
+        return ctwedge_result.unwrap();
     }
+    unimplemented!("This input file format is not supported.");
 }
 
 fn parse_archives(input_files: &Vec<PathBuf>) -> std::io::Result<Vec<(&PathBuf, u64, CASpec)>> {
