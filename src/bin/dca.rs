@@ -295,11 +295,19 @@ fn parse_commandline() -> Args {
         output = Some(output_path);
     }
 
-    let input_files : Vec<PathBuf> = matches
+    let input_files : Vec<PathBuf> = if matches.is_present("input_files") {
+        // We have input files on the command line, use these
+        matches
         .values_of_os("input_files")
         .unwrap()
         .map(|x| PathBuf::from(x))
-        .collect();
+        .collect()
+    } else {
+        // Use the current executable as archive (self-extraction)
+        vec![std::env::current_exe()
+             .expect("Could not determine path to self-extracting archive, please add it as an argument")
+        ]
+    };
 
     for f in input_files.iter() {
         if !f.is_file() {
