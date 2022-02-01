@@ -38,7 +38,7 @@ $ head -5 /tmp/example.csv
 
 To compress this CA, you would use `cca`:
 ``` bash
-./target/release/cca --no-header -c /tmp/example.csv -t 6 -v 4 -v 4 -v 4 -v 4 -v 4 -v 4 -v 4
+$ ./target/release/cca --no-header -c /tmp/example.csv -t 6 -v 4 -v 4 -v 4 -v 4 -v 4 -v 4 -v 4
 Opening /tmp/example.csv for reading
 Opening /tmp/example.cca for writing raw compressed CA data
 Opening /tmp/example.ccmeta for writing metadata
@@ -50,7 +50,7 @@ In most practical circumstances, you would repeat this step for all CAs you wish
 
 Once you have a number of compressed CAs, you can create a `.ca2` archive file using `pca`:
 ``` bash
-./target/release/pca -o /tmp/archive.ca2 /tmp/*.cca /tmp/*.ccmeta
+$ ./target/release/pca -o /tmp/archive.ca2 /tmp/*.cca /tmp/*.ccmeta
 Parsing CA specifications...
 Reordering CAs by size...
 Writing compressed CAs...
@@ -63,8 +63,17 @@ You can now store or share this `.ca2` file.
 When you want to retrieve a CA that is compatible to some specification, e.g. defined using an ACTS input file, use `dca` to decompress this data:
 
 ``` bash
-./target/release/dca -t 6 --ipm acts_in.txt -o /tmp/translated.csv /tmp/archive.ca2
+$ ./target/release/dca -t 6 --ipm acts_in.txt -o /tmp/translated.csv /tmp/archive.ca2
 Decompressed CA with 4096 rows.
 ```
 
 This can also be used to translate CAs (in the concrete example underlying this text, we used our toolchain to translate a numeric CA to a different specification that contains string values).
+
+``` bash
+$ head -5 /tmp/translated.csv
+p1,p2,p3,p4,p5,p6
+omg,0,true,0,0,foo
+lol,1,false,0,1,foo
+bbq,2,true,0,2,foo
+omg,3,false,0,3,foo
+```
