@@ -65,7 +65,7 @@ pub fn main() -> std::io::Result<()> {
     // Open the output files
     println!("Opening {} for writing raw compressed CA data", output_compressed.to_string_lossy());
     let f_compressed = File::create(output_compressed)?;
-    let mut encoder = BzEncoder::new(BufWriter::new(f_compressed), Compression::default());
+    let mut encoder = BzEncoder::new(BufWriter::new(f_compressed), Compression::fast());
     println!("Opening {} for writing metadata", output_meta.to_string_lossy());
     let f_meta = File::create(output_meta)?;
     let mut writer_meta = BufWriter::new(f_meta);
@@ -83,7 +83,7 @@ pub fn main() -> std::io::Result<()> {
         let record = result?;
 
         // Iterate over the *output* columns (not the ones in the CSV!)
-        for (_i, column) in column_map.iter().enumerate() {
+        for column in column_map.iter() {
             //println!("Grabbing column {}", column);
             let value = record.get(*column).unwrap();
             let value_out = match value_maps[*column].get(value) {
