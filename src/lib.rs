@@ -15,8 +15,42 @@ pub const MAGIC_BYTES_CA2 : &[u8; 16] = b"CCAA_INDEX_FILE\n";
 // Magic bytes for a compressed raw CA file; note the space!
 pub const MAGIC_BYTES_CCA : &str = " CCA";
 
+// Known CA2 versions
+#[derive(Debug,Clone,Copy)]
+pub enum CA2Version {
+    Basic,
+    Bzip2
+}
+
 // The version of the files we are processing
-pub const CA2_VERSION : u16 = 1;
+pub const CA2_DEFAULT_VERSION : CA2Version = CA2Version::Bzip2;
+
+impl Default for CA2Version {
+    fn default() -> Self {
+        CA2_DEFAULT_VERSION
+    }
+}
+// CA2Version -> u16
+impl From<CA2Version> for u16 {
+    fn from(v: CA2Version) -> Self {
+        match v {
+            CA2Version::Basic => 1,
+            CA2Version::Bzip2 => 2
+        }
+    }
+}
+// u16 -> CA2Version
+impl TryFrom<u16> for CA2Version {
+    type Error = &'static str;
+
+    fn try_from(v: u16) -> Result<Self, Self::Error> {
+        match v {
+            1 => Ok(CA2Version::Basic),
+            2 => Ok(CA2Version::Bzip2),
+            _ => Err("Unknown CA2 metadata version")
+        }
+    }
+}
 
 // Terminator for the serialized list of v_i aka vs
 pub const VS_TERMINATOR : u16 = 0;
@@ -24,6 +58,7 @@ pub const VS_TERMINATOR : u16 = 0;
 // The CA specification contains metadata required to uncompress a CA2 file
 #[derive(Debug)]
 pub struct CASpec {
+    pub version: CA2Version,
     pub n: u64,
     pub t: u8,
     pub vs: Vec<u16>
@@ -41,7 +76,7 @@ impl CASpec {
     pub fn serialize(&self) -> Vec<u8> {
         let mut out : Vec<u8> = Vec::new();
 
-        out.extend(CA2_VERSION.to_be_bytes());
+        out.extend(u16::from(self.version).to_be_bytes());
         out.extend(self.n.to_be_bytes());
         out.extend(self.t.to_be_bytes());
         for v in self.vs.iter() {
@@ -52,12 +87,15 @@ impl CASpec {
     }
 
     pub fn unserialize(buf: &[u8]) -> Option<(Self, usize)> {
-        let ca2_version = u16::from_be_bytes(buf[0..2].try_into().unwrap());
-
-        if ca2_version != CA2_VERSION {
+        let try_version = CA2Version::try_from(u16::from_be_bytes(buf[0..2].try_into().unwrap()));
+        // If this is a version we don't know about, just return None
+        if try_version.is_err() {
             return None;
         }
+        let version = try_version.unwrap();
 
+        // NOTE: Currently, all known CA2 versions have the same metadata.
+        // This might change in the future, making adjustments to the code below necessary
         let n = u64::from_be_bytes(buf[2..10].try_into().unwrap());
         let t = u8::from_be_bytes(buf[10..11].try_into().unwrap());
 
@@ -81,7 +119,7 @@ impl CASpec {
 
         }
 
-        Some((Self { n, t, vs }, i))
+        Some((Self { version, n, t, vs }, i))
     }
 
     #[inline]
@@ -95,7 +133,8 @@ impl CASpec {
 
 // The primitive data type used to hold compressed data for bit shifts
 pub type CompressionChunk = u64;
-pub type Row = Vec<u16>;
+pub type Value = u16;
+pub type Row = Vec<Value>;
 
 // An iterator over compressed rows
 pub struct CompressedCA<R: Read> {
@@ -110,33 +149,59 @@ pub struct CompressedCA<R: Read> {
     // Current row
     row_current: u64,
     // Bit sizes for each value in the row
-    bit_sizes: Vec<u8>
+    bit_sizes: Vec<u8>,
+    // The version of compressed data we're handling
+    ca2_version: CA2Version
 }
 
 impl<R: Read> CompressedCA<R> {
-    pub fn new(reader: R, bit_sizes: Vec<u8>, rows_total: u64) -> CompressedCA<R> {
+    pub fn new(reader: R, bit_sizes: Vec<u8>, rows_total: u64, ca2_version: CA2Version) -> CompressedCA<R> {
         CompressedCA {
             reader,
             rows_total,
             chunk: 0,
             pos: 0,
             row_current: 0,
-            bit_sizes
+            bit_sizes,
+            ca2_version
         }
     }
+
     fn fill_chunk(&mut self) -> std::io::Result<()> {
         let mut buf = [0; (CompressionChunk::BITS/8) as usize];
         self.reader.read_exact(&mut buf)?;
         self.chunk = CompressionChunk::from_be_bytes(buf);
-        //println!("Filled chunk {:#066b}", self.chunk);
         Ok(())
     }
-}
 
-// Returns rows from a compressed CA
-impl<R: Read> Iterator for CompressedCA<R> {
-    type Item = Row;
-    fn next(&mut self) -> Option<Self::Item> {
+    // Decoder for newer bzip2 format
+    fn next_bzip2(&mut self) -> Option<Row> {
+        if self.row_current < self.rows_total {
+            // We don't really use the contents of `bit_sizes` in this function,
+            // but we do use its length because it tells us how many u16 there are
+            let mut buf : Vec<u8> = vec![0; self.bit_sizes.len()*2]; // u8, so twice as large
+
+            // Pull input data into the buffer
+            if self.reader.read_exact(&mut buf).is_err() {
+                self.rows_total = 0; // XXX Hacky
+                return None;
+            }
+
+            let out = buf.chunks(2).map(
+                |c| u16::from_be_bytes(
+                    c.try_into().expect("Internal error, did not get u16-sized slice")
+                )
+            ).collect::<Row>();
+
+
+            self.row_current += 1;
+            return Some(out);
+        }
+        None
+    }
+
+    // Decoder for old basic format
+    fn next_old(&mut self) -> Option<Row> {
         if self.row_current < self.rows_total {
             let mut out : Row = vec![0; self.bit_sizes.len()];
             let mut value_index = 0; // Which value in self.bit_sizes we're currently handling
@@ -158,13 +223,7 @@ impl<R: Read> Iterator for CompressedCA<R> {
                     bits_remain_in_chunk
                 };
                 if bits_available > 0 {
-                    //println!("{} bits remaining in chunk, {} bits required for this value, {} bits available",
-                    //         bits_remain_in_chunk, bits_remaining, bits_available);
                     self.pos += bits_available;
-                    //println!("Rotating by {} bits => {:#066b}", self.pos, self.chunk.rotate_left(self.pos as u32));
-                    //println!("Mask:\t{:#066b}", CompressionChunk::MAX >> (CompressionChunk::BITS-bits_available as u32));
-                    //println!("Rot&mask:\t{:#066b}", self.chunk.rotate_left(self.pos as u32) & (CompressionChunk::MAX >> (CompressionChunk::BITS-bits_available as u32)));
-                    //println!("out[{}] before: {:#018b}", value_index, out[value_index]);
                     out[value_index] = (out[value_index] << bits_available) |
                     (
                         self.chunk.rotate_left(self.pos as u32) &
@@ -190,6 +249,17 @@ impl<R: Read> Iterator for CompressedCA<R> {
             return Some(out);
         }
         None
+    }
+}
+
+// Returns rows from a compressed CA
+impl<R: Read> Iterator for CompressedCA<R> {
+    type Item = Row;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.ca2_version {
+            CA2Version::Basic => self.next_old(),
+            CA2Version::Bzip2 => self.next_bzip2()
+        }
     }
 }
 

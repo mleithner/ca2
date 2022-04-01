@@ -1,7 +1,7 @@
 use pest::Parser;
 use pest::iterators::Pairs;
 use pest_derive::Parser;
-use crate::{RequestedCA, CASpec};
+use crate::{RequestedCA, CASpec, CA2Version};
 
 #[derive(Parser)]
 #[grammar = "ctwedge.pest"]
@@ -103,6 +103,7 @@ fn parse_ctwedge(pairs: Pairs<Rule>, strength: u8) -> RequestedCA {
         parameter_values,
         parameter_sizes,
         ca_spec: CASpec {
+            version: CA2Version::default(),
             n: 0,
             t: strength,
             vs

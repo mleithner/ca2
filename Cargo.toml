@@ -13,3 +13,4 @@ pest_derive = "2.1.0"
 clap = { version = "3.0.9", features = ["derive"] }
 serde = { version = "1.0.133", features = ["derive"] }
 csv = "1.1"
+bzip2 = "0.4.3"

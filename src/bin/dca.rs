@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{Write, Read, BufReader, BufRead, BufWriter, Error, ErrorKind, Seek, SeekFrom};
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
+use bzip2::bufread::BzDecoder;
 
 // Compressed CA unpacker
 //
@@ -78,6 +79,7 @@ fn decode_ca(file: &PathBuf, offset: &u64, ca_spec: &CASpec
     let f = File::open(file)?;
     let mut reader = BufReader::new(f);
     reader.seek(SeekFrom::Start(*offset))?;
+    let decoder = setup_decoder(ca_spec, reader);
 
     // Create the mapping between stored and requested parameters
     let reorder_map = generate_reorder_map(&requested_ca.parameter_sizes, ca_spec);
@@ -88,7 +90,7 @@ fn decode_ca(file: &PathBuf, offset: &u64, ca_spec: &CASpec
     }
 
     // Get an iterator over compressed rows
-    let compressed_ca = CompressedCA::new(reader, generate_bit_sizes(&ca_spec.vs), ca_spec.n);
+    let compressed_ca = CompressedCA::new(decoder, generate_bit_sizes(&ca_spec.vs), ca_spec.n, ca_spec.version);
     for row in compressed_ca {
         // This might be a bit confusing.
         // We iterate over the reorder map (which maps stored parameters to requested parameters).
@@ -104,6 +106,13 @@ fn decode_ca(file: &PathBuf, offset: &u64, ca_spec: &CASpec
     }
 
     Ok(())
+}
+
+fn setup_decoder<R: 'static + Read>(ca_spec: &CASpec, reader: BufReader<R>) -> Box<dyn Read> {
+    match ca_spec.version {
+        CA2Version::Basic => Box::new(reader),
+        CA2Version::Bzip2 => Box::new(BzDecoder::new(reader))
+    }
 }
 
 // The reorder map contains a mapping of requested parameters to stored parameters.
@@ -181,7 +190,8 @@ fn extract_ca_specs(input_file: &PathBuf) -> std::io::Result<Vec<(u64, CASpec)>>
         let cca_offset = u64::from_be_bytes(ca_metadata[buf_offset..buf_offset+8].try_into().unwrap());
         let (ca_spec, ca_spec_len) = CASpec::unserialize(&ca_metadata[buf_offset+8..])
             .expect("Corrupted CA specification, aborting");
-        buf_offset += ca_spec_len + 8;
+        // Jump over terminator
+        buf_offset += ca_spec_len + (u64::BITS as usize/8);
         out.push((cca_offset, ca_spec));
     }
 

@@ -10,6 +10,13 @@ It provides three executables:
 
 For further information, feature requests and bug reports, please contact `mleithner@sba-research.org`.
 
+## CA2 Versions
+
+The following CA2 versions exist:
+
+* `Basic` (identifier `1`): The original method as described in the publication above. This uses a simple efficient bit encoding scheme.
+* `Bzip2` (identifier `2`): This version is identical to `Basic`, but uses Bzip2 to store raw data. The CCMeta content remains the same. The code in this repository now always stores data using `Bzip2`, but retains the ability to decode archives using `Basic`. 
+
 ## Setup
 
 You need a working Rust toolchain, e.g. from [rustup](https://rustup.rs/).
