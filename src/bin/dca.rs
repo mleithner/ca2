@@ -118,13 +118,18 @@ fn setup_decoder<R: 'static + Read>(ca_spec: &CASpec, reader: BufReader<R>) -> B
 // The reorder map contains a mapping of requested parameters to stored parameters.
 // reorder_map[i] points to the index of the requested parameter i in a decoded row.
 fn generate_reorder_map(requested_parameter_sizes: &Vec<u16>, stored_ca_spec: &CASpec) -> Vec<usize> {
-    let mut reorder_map = Vec::with_capacity(requested_parameter_sizes.len());
-    for req_size in requested_parameter_sizes.iter() {
+    // Reorder map is initially filled with impossible indices (can only go from 0 to vs.len()-1)
+    let mut reorder_map = vec![stored_ca_spec.vs.len(); requested_parameter_sizes.len()];
+    // This is an enumerated version of requested_parameter_sizes, sorted desc by parameter size
+    let mut sorted_requested_parameter_sizes : Vec<(usize, &u16)> = requested_parameter_sizes.iter().enumerate().collect();
+    sorted_requested_parameter_sizes.sort_by(|(_i_a, a), (_i_b, b)| b.cmp(a));
+
+    for (req_idx, req_size) in sorted_requested_parameter_sizes.iter() {
         let (mapping, _v) = stored_ca_spec
                 .vs.iter().enumerate()
-                .find(|(i, v)| req_size <= *v && !reorder_map.contains(i))
+                .find(|(i, v)| req_size <= v && !reorder_map.contains(i))
                 .expect("Reorder mapping is broken, this should never happen");
-        reorder_map.push(mapping);
+        reorder_map[*req_idx] = mapping;
     }
     reorder_map
 }
